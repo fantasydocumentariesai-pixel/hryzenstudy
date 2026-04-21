@@ -47,11 +47,9 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-// --- CONSTANTS & HELPERS ---
 const QUEST_TEMPLATES = [
   { name: "Neural Breach", description: "Infiltrate the core data layers." },
-  { name: "Logic Siege", description: "Defend your cognitive borders." },
-  { name: "Memory Synthesis", description: "Forge new neural connections." }
+  { name: "Logic Siege", description: "Defend your cognitive borders." }
 ];
 
 const MONSTER_PREFIXES = ["Corrupted", "Vitreous", "Binary", "Quantum", "Spectral"];
@@ -61,7 +59,7 @@ const generateQuestionsFromText = (text) => {
   const sentences = text.split(/[.!?]/).filter(s => s.trim().length > 40);
   return sentences.slice(0, 5).map((s, i) => ({
     id: `q-${i}-${Date.now()}`,
-    question: `Artifact Analysis: "${s.trim().substring(0, 70)}..."?`,
+    question: `Artifact Data: "${s.trim().substring(0, 70)}..."?`,
     options: ["Primary Logic", "Secondary Data", "System Error", "Noise"],
     answer: 0
   }));

@@ -22,12 +22,16 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 const getPdfLib = () => window.pdfjsLib;
 
 // --- Firebase Configuration ---
-// These are provided via the environment
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'hryzen-study-app';
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCHEljnX6Jth5aSudsr-TkEj6DGCK547uo",
+  authDomain: "hryzenstudy.firebaseapp.com",
+  projectId: "hryzenstudy",
+  storageBucket: "hryzenstudy.firebasestorage.app",
+  messagingSenderId: "407403275300",
+  appId: "1:407403275300:web:1daa36c1b726967e1824b1",
+  measurementId: "G-ZV1LLLQ4TJ"
+};
 
 const App = () => {
   const [view, setView] = useState('intro'); 

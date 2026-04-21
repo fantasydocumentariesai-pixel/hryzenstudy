@@ -730,7 +730,6 @@ export default function App() {
 }
 
 export defalt App;
-
 import { createRoot } from 'react-dom/client';
 const container = document.getElementById('root');
 const root = createRoot(container);

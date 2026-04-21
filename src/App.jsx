@@ -1,478 +1,352 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
-  LogIn, LogOut, BookOpen, Sword, Shield, 
-  Trophy, Upload, Sparkles, Scroll, ChevronRight, 
-  Zap, Heart, Skull, Map, FileText, Loader2,
-  Coins, SwordIcon, BrainCircuit
+  BookOpen, Sparkles, LogIn, GraduationCap, 
+  Upload, FileText, Play, CheckCircle2, 
+  Trophy, X, Loader2, ChevronRight, BrainCircuit,
+  Gamepad2, Compass, Zap, LogOut, ShieldCheck,
+  Target, Rocket, Swords, Cpu
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithPopup, 
   GoogleAuthProvider, 
+  signInAnonymously, 
   onAuthStateChanged, 
-  signOut,
-  signInAnonymously,
-  signInWithCustomToken
+  signOut 
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  onSnapshot, 
-  collection, 
-  query 
-} from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// --- FIREBASE CONFIGURATION (Replace with your actual keys) ---
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "hryzen-study.firebaseapp.com",
-  projectId: "hryzen-study",
-  storageBucket: "hryzen-study.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
-};
+// --- Global PDF.js Handling ---
+const getPdfLib = () => window.pdfjsLib;
 
-// Initialize Firebase
+// --- Firebase Configuration ---
+// These are provided via the environment
+const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'hryzen-study-default';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'hryzen-study-app';
 
-// --- THEME DATA ---
-const ADVENTURE_THEMES = [
-  { name: 'Ancient Dungeon', color: 'bg-slate-900', secondary: 'border-slate-700', monster: 'Stone Golem', icon: '🏰' },
-  { name: 'Enchanted Forest', color: 'bg-emerald-950', secondary: 'border-emerald-800', monster: 'Bramble Beast', icon: '🌲' },
-  { name: 'Frozen Peaks', color: 'bg-cyan-950', secondary: 'border-cyan-800', monster: 'Frost Giant', icon: '❄️' },
-  { name: 'Burning Sands', color: 'bg-orange-950', secondary: 'border-orange-800', monster: 'Fire Salamander', icon: '🔥' }
-];
-
-export default function App() {
+const App = () => {
+  const [view, setView] = useState('intro'); 
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('home'); // home, dashboard, quest, results
-  const [stats, setStats] = useState({ xp: 0, gold: 0, level: 1, health: 100 });
-  const [currentQuest, setCurrentQuest] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [quizData, setQuizData] = useState([]);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [score, setScore] = useState(0);
+  const [adventure, setAdventure] = useState({ theme: 'Space', icon: <Rocket />, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500' });
 
-  // --- Auth Effect ---
+  // Load PDF.js Script Dynamically
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+    if (!window.pdfjsLib) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.async = true;
+      script.onload = () => {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         }
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
-    };
-    initAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+      };
+      document.head.appendChild(script);
+    }
   }, []);
 
-  // --- Firestore Stats Sync ---
+  // Handle Auth State
   useEffect(() => {
-    if (!user) return;
-    const statsDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'stats');
-    const unsubscribe = onSnapshot(statsDoc, (docSnap) => {
-      if (docSnap.exists()) {
-        setStats(docSnap.data());
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        } catch (e) {
+          await signInAnonymously(auth);
+        }
       } else {
-        setDoc(statsDoc, { xp: 0, gold: 0, level: 1, health: 100 });
+        await signInAnonymously(auth);
       }
-    }, (error) => console.error("Firestore sync error:", error));
+    };
 
-    return () => unsubscribe();
-  }, [user]);
-
-  // --- Handlers ---
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, provider);
-      setView('dashboard');
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleLogout = () => signOut(auth).then(() => setView('home'));
-
-  const simulatePDFUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUploading(true);
-    // Simulate Processing Time
-    setTimeout(() => {
-      setIsUploading(false);
-      startNewAdventure(file.name);
-    }, 2500);
-  };
-
-  const startNewAdventure = (fileName) => {
-    const theme = ADVENTURE_THEMES[Math.floor(Math.random() * ADVENTURE_THEMES.length)];
-    const mockQuestions = [
-      { q: "What is the primary concept discussed in " + fileName + "?", a: ["Concept A", "Concept B", "Concept C"], correct: 0 },
-      { q: "How does the author define the 'Third Stage'?", a: ["Static", "Evolutionary", "Cyclical"], correct: 1 },
-      { q: "Which variable is identified as the independent factor?", a: ["Temperature", "Mass", "Velocity"], correct: 2 }
-    ];
-    
-    setCurrentQuest({
-      fileName,
-      theme,
-      questions: mockQuestions,
-      currentIdx: 0,
-      damageDealt: 0,
-      maxHp: 100,
-      monsterHp: 100
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser(u);
+        if (view === 'auth' || view === 'intro') setView('dashboard');
+      } else {
+        setUser(null);
+        initAuth();
+      }
     });
-    setView('quest');
-  };
+    return () => unsubscribe();
+  }, [view]);
 
-  const handleAnswer = (idx) => {
-    if (!currentQuest) return;
+  // Handle PDF Parsing
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || file.type !== 'application/pdf') return;
     
-    const isCorrect = idx === currentQuest.questions[currentQuest.currentIdx].correct;
-    
-    if (isCorrect) {
-      const newMonsterHp = Math.max(0, currentQuest.monsterHp - 34);
-      setCurrentQuest(prev => ({ 
-        ...prev, 
-        monsterHp: newMonsterHp,
-        currentIdx: prev.currentIdx + 1
-      }));
-      
-      if (currentQuest.currentIdx >= currentQuest.questions.length - 1) {
-        finishQuest(true);
-      }
-    } else {
-      setStats(prev => ({ ...prev, health: Math.max(0, prev.health - 20) }));
-      setCurrentQuest(prev => ({ 
-        ...prev, 
-        currentIdx: prev.currentIdx + 1 
-      }));
+    const pdfjsLib = getPdfLib();
+    if (!pdfjsLib) return;
 
-      if (currentQuest.currentIdx >= currentQuest.questions.length - 1) {
-        finishQuest(false);
-      }
-    }
-  };
-
-  const finishQuest = (won) => {
-    if (won) {
-      const rewardXp = 50;
-      const rewardGold = 25;
-      const newXp = stats.xp + rewardXp;
-      const newLevel = Math.floor(newXp / 100) + 1;
-      
-      const statsDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'stats');
-      setDoc(statsDoc, { 
-        ...stats, 
-        xp: newXp, 
-        gold: stats.gold + rewardGold, 
-        level: newLevel 
-      });
-    }
-    setView('results');
-  };
-
-  // --- Components ---
-  if (loading) return (
-    <div className="h-screen w-full flex items-center justify-center bg-slate-50">
-      <Loader2 className="animate-spin text-indigo-600 w-12 h-12" />
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 transition-colors duration-500">
-      {/* Navigation */}
-      <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
-            <div className="bg-indigo-600 p-2 rounded-lg">
-              <BrainCircuit className="text-white w-6 h-6" />
-            </div>
-            <span className="font-bold text-xl tracking-tight">HryzenStudy</span>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            {user && (
-              <div className="hidden md:flex items-center gap-4 text-sm font-medium text-slate-600">
-                <span className="flex items-center gap-1"><Zap className="w-4 h-4 text-amber-500 fill-amber-500" /> LVL {stats.level}</span>
-                <span className="flex items-center gap-1"><Coins className="w-4 h-4 text-yellow-500" /> {stats.gold}g</span>
-              </div>
-            )}
-            {user ? (
-              <button 
-                onClick={handleLogout}
-                className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-red-600 transition-colors"
-              >
-                <LogOut className="w-4 h-4" /> Sign Out
-              </button>
-            ) : (
-              <button 
-                onClick={handleLogin}
-                className="bg-indigo-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-200"
-              >
-                <LogIn className="w-4 h-4" /> Get Started
-              </button>
-            )}
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content Area */}
-      <main className="max-w-5xl mx-auto px-4 py-12">
+    setLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const typedarray = new Uint8Array(event.target.result);
+        const loadingTask = pdfjsLib.getDocument({ data: typedarray });
+        const pdf = await loadingTask.promise;
+        let fullText = "";
         
-        {/* VIEW: HOME */}
-        {view === 'home' && !user && (
-          <div className="text-center py-20 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <h1 className="text-6xl font-black text-slate-900 mb-6 leading-tight">
-              Turn your notes into <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Legendary Quests.</span>
-            </h1>
-            <p className="text-xl text-slate-600 mb-10 max-w-2xl mx-auto">
-              HryzenStudy uses AI to transform boring PDFs into DnD adventures. 
-              Slay study monsters, level up your character, and master your subjects.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button 
-                onClick={handleLogin}
-                className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:scale-105 transition-transform shadow-xl shadow-indigo-100 flex items-center gap-3"
-              >
-                Start Your Journey <Sword className="w-5 h-5" />
-              </button>
-              <button className="px-8 py-4 bg-white text-slate-700 border border-slate-200 rounded-2xl font-bold text-lg hover:bg-slate-50 transition-colors">
-                View Demo
-              </button>
-            </div>
-            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-              <FeatureCard icon={<Scroll />} title="Drop a PDF" desc="Upload any study guide, textbook chapter, or lecture notes." />
-              <FeatureCard icon={<Sparkles />} title="AI Questmaster" desc="Our AI generates a unique DnD campaign based on your content." />
-              <FeatureCard icon={<Trophy />} title="Earn Loot" desc="Pass quizzes to earn gold and level up your character profile." />
-            </div>
-          </div>
-        )}
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          fullText += content.items.map(item => item.str).join(" ");
+        }
+        
+        processStudyNotes(fullText);
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("PDF Error:", error);
+      setLoading(false);
+    }
+  };
 
-        {/* VIEW: DASHBOARD */}
-        {(view === 'dashboard' || (view === 'home' && user)) && (
-          <div className="animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-3xl font-bold">Your Library</h2>
-              <div className="relative">
-                <input 
-                  type="file" 
-                  accept=".pdf" 
-                  onChange={simulatePDFUpload}
-                  className="hidden" 
-                  id="pdf-upload" 
-                  disabled={isUploading}
-                />
-                <label 
-                  htmlFor="pdf-upload"
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold cursor-pointer transition-all ${isUploading ? 'bg-slate-200 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'}`}
-                >
-                  {isUploading ? <Loader2 className="animate-spin w-5 h-5" /> : <Upload className="w-5 h-5" />}
-                  {isUploading ? "Reading Tome..." : "New Study Quest"}
-                </label>
-              </div>
-            </div>
+  const processStudyNotes = (text) => {
+    const sentences = text.split(/[.!?]/).filter(s => s.trim().length > 40);
+    const themes = [
+      { name: 'Nebula Explorer', icon: <Rocket />, color: 'text-cyan-400', border: 'border-cyan-500', bg: 'bg-cyan-500/10' },
+      { name: 'Temple Raider', icon: <Swords />, color: 'text-amber-400', border: 'border-amber-500', bg: 'bg-amber-500/10' },
+      { name: 'Cyber Protocol', icon: <Cpu />, color: 'text-purple-400', border: 'border-purple-500', bg: 'bg-purple-500/10' }
+    ];
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-8 flex flex-col items-center justify-center text-slate-400 group hover:border-indigo-300 transition-colors cursor-pointer">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <FileText className="w-8 h-8" />
-                </div>
-                <p className="font-semibold">Drag & Drop PDF here</p>
-                <p className="text-xs">Limit 50MB</p>
-              </div>
-              
-              {/* Mock List */}
-              <QuestItem title="Biology: Cellular Respiration" date="2 days ago" score="85%" />
-              <QuestItem title="World History: Ottoman Empire" date="Yesterday" score="N/A" isNew />
-            </div>
-          </div>
-        )}
+    const selectedTheme = themes[Math.floor(Math.random() * themes.length)];
+    setAdventure(selectedTheme);
 
-        {/* VIEW: QUEST (DND ADVENTURE) */}
-        {view === 'quest' && currentQuest && (
-          <div className={`fixed inset-0 z-[100] ${currentQuest.theme.color} text-white flex flex-col p-6 animate-in zoom-in-95 duration-500`}>
-            <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col">
-              {/* Game Header */}
-              <div className="flex justify-between items-center mb-10">
-                <div className="flex items-center gap-3">
-                  <div className="bg-white/10 p-3 rounded-full border border-white/20">
-                    <Map className="w-6 h-6 text-indigo-300" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-xl uppercase tracking-widest">{currentQuest.theme.name}</h3>
-                    <p className="text-sm opacity-60">Objective: Defeat the {currentQuest.theme.monster}</p>
-                  </div>
-                </div>
-                <button onClick={() => setView('dashboard')} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+    const quiz = sentences.slice(0, 5).map((sentence, idx) => ({
+      id: idx,
+      question: `Is the following concept from your notes accurate? "${sentence.trim().substring(0, 100)}..."`,
+      answer: true 
+    }));
 
-              {/* Monster Battle Area */}
-              <div className="flex-1 flex flex-col items-center justify-center gap-12">
-                <div className="relative text-center">
-                  <div className="text-9xl mb-4 drop-shadow-2xl animate-bounce">{currentQuest.theme.icon}</div>
-                  <h4 className="text-3xl font-black mb-2 uppercase italic">{currentQuest.theme.monster}</h4>
-                  
-                  {/* Monster HP Bar */}
-                  <div className="w-64 h-4 bg-white/10 rounded-full overflow-hidden border border-white/20 mx-auto">
-                    <div 
-                      className="h-full bg-red-500 transition-all duration-1000 ease-out" 
-                      style={{ width: `${currentQuest.monsterHp}%` }}
-                    />
-                  </div>
-                  <p className="text-xs mt-2 font-mono uppercase tracking-tighter opacity-50">Enemy HP: {currentQuest.monsterHp}/100</p>
-                </div>
+    setQuizData(quiz);
+    setScore(0);
+    setCurrentQuestion(0);
+    setLoading(false);
+    setView('quiz');
+  };
 
-                {/* Question Box */}
-                <div className={`w-full max-w-2xl bg-white/5 backdrop-blur-xl border-2 ${currentQuest.theme.secondary} rounded-3xl p-8 shadow-2xl relative`}>
-                  <div className="absolute -top-4 left-8 bg-indigo-500 px-4 py-1 rounded-full text-xs font-bold uppercase">Trial {currentQuest.currentIdx + 1} of {currentQuest.questions.length}</div>
-                  
-                  <h2 className="text-2xl font-bold mb-8 leading-relaxed">
-                    {currentQuest.questions[currentQuest.currentIdx].q}
-                  </h2>
-                  
-                  <div className="grid gap-4">
-                    {currentQuest.questions[currentQuest.currentIdx].a.map((ans, i) => (
-                      <button 
-                        key={i}
-                        onClick={() => handleAnswer(i)}
-                        className="group flex items-center justify-between w-full p-4 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20 hover:border-white/30 transition-all text-left"
-                      >
-                        <span className="font-medium">{ans}</span>
-                        <ChevronRight className="w-5 h-5 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Player Stats Footer */}
-              <div className="mt-auto h-20 flex items-center justify-between border-t border-white/10 pt-4">
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center border-2 border-white/20 overflow-hidden">
-                      <img src={user.photoURL} alt="Hero" className="w-full h-full object-cover" />
-                   </div>
-                   <div>
-                     <p className="font-bold text-sm">{user.displayName}</p>
-                     <div className="flex gap-1">
-                        {[1,2,3,4,5].map(h => (
-                          <Heart key={h} className={`w-4 h-4 ${stats.health >= h * 20 ? 'text-red-500 fill-red-500' : 'text-white/20'}`} />
-                        ))}
-                     </div>
-                   </div>
-                </div>
-                <div className="flex items-center gap-6">
-                   <StatIcon icon={<SwordIcon className="w-4 h-4" />} label="ATK" value="34" />
-                   <StatIcon icon={<Shield className="w-4 h-4" />} label="DEF" value="20" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* VIEW: RESULTS */}
-        {view === 'results' && (
-          <div className="text-center py-20 animate-in zoom-in-95 duration-500 max-w-md mx-auto">
-            <div className="w-24 h-24 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
-               <Trophy className="w-12 h-12 text-indigo-600" />
-            </div>
-            <h2 className="text-4xl font-black mb-2">QUEST COMPLETE!</h2>
-            <p className="text-slate-500 mb-10">You have successfully mastered the lore of your study notes.</p>
-            
-            <div className="grid grid-cols-2 gap-4 mb-10">
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <p className="text-xs uppercase font-bold text-slate-400 mb-1">XP Earned</p>
-                <p className="text-2xl font-black text-indigo-600">+50</p>
-              </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <p className="text-xs uppercase font-bold text-slate-400 mb-1">Gold Looted</p>
-                <p className="text-2xl font-black text-amber-500">+25</p>
-              </div>
-            </div>
-
-            <button 
-              onClick={() => setView('dashboard')}
-              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all"
-            >
-              Return to Tavern
-            </button>
-          </div>
-        )}
-      </main>
-
-      {/* Decorative Blur */}
-      <div className="fixed top-0 right-0 -z-10 w-96 h-96 bg-indigo-200/20 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2" />
-      <div className="fixed bottom-0 left-0 -z-10 w-96 h-96 bg-violet-200/20 blur-3xl rounded-full -translate-x-1/2 translate-y-1/2" />
+  const IntroView = () => (
+    <div className="min-h-screen bg-[#020617] text-white flex flex-col items-center justify-center p-6 text-center overflow-hidden relative">
+      <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
+         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 blur-[120px] rounded-full"></div>
+         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/20 blur-[120px] rounded-full"></div>
+      </div>
+      <div className="relative mb-10 group">
+        <div className="absolute -inset-4 bg-cyan-500/30 blur-3xl rounded-full group-hover:animate-pulse transition-all"></div>
+        <BrainCircuit size={120} className="text-cyan-400 relative" />
+      </div>
+      <h1 className="text-7xl md:text-8xl font-black tracking-tighter mb-6 bg-gradient-to-b from-white to-slate-500 bg-clip-text text-transparent">
+        HRYZEN STUDY
+      </h1>
+      <p className="text-slate-400 text-xl max-w-2xl mb-12 leading-relaxed">
+        The NotebookLM-inspired engine for high-performance students. 
+        Transform static notes into interactive adventures through neural PDF processing.
+      </p>
+      <button 
+        onClick={() => setView('auth')}
+        className="group flex items-center gap-4 bg-white text-black px-12 py-6 rounded-[2rem] font-bold text-2xl hover:bg-cyan-400 transition-all active:scale-95 shadow-[0_0_50px_rgba(34,211,238,0.4)]"
+      >
+        Get Started <ChevronRight className="group-hover:translate-x-2 transition-transform" />
+      </button>
     </div>
   );
-}
 
-// --- Helper Components ---
-
-function FeatureCard({ icon, title, desc }) {
-  return (
-    <div className="p-8 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all">
-      <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6">
-        {React.cloneElement(icon, { size: 24 })}
-      </div>
-      <h3 className="text-xl font-bold mb-2">{title}</h3>
-      <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
-    </div>
-  );
-}
-
-function QuestItem({ title, date, score, isNew }) {
-  return (
-    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group cursor-pointer relative overflow-hidden">
-      {isNew && <div className="absolute top-4 right-4 bg-indigo-600 text-[10px] text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">New</div>}
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
-          <BookOpen className="w-6 h-6 text-slate-400 group-hover:text-indigo-600" />
+  const AuthView = () => (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6">
+      <div className="w-full max-w-md bg-slate-900/40 border border-slate-800 p-12 rounded-[3.5rem] backdrop-blur-3xl shadow-2xl">
+        <h2 className="text-4xl font-black text-white mb-3 text-center tracking-tight">Access HQ</h2>
+        <p className="text-slate-500 text-center mb-12 font-medium">Identify yourself to sync your knowledge base.</p>
+        <div className="space-y-4">
+          <button 
+            onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+            className="w-full flex items-center justify-center gap-4 bg-white text-black py-5 rounded-[1.5rem] font-bold text-lg hover:scale-[1.02] active:scale-95 transition-all shadow-xl"
+          >
+            <ShieldCheck className="text-blue-600" /> Continue with Google
+          </button>
+          <div className="flex items-center gap-4 my-8">
+            <div className="h-[1px] flex-1 bg-slate-800"></div>
+            <span className="text-slate-700 font-black text-xs tracking-widest uppercase">Protocol</span>
+            <div className="h-[1px] flex-1 bg-slate-800"></div>
+          </div>
+          <button 
+            onClick={() => signInAnonymously(auth)}
+            className="w-full py-5 border border-slate-700 text-slate-400 rounded-[1.5rem] font-bold hover:bg-slate-800/50 hover:text-white transition-all active:scale-95"
+          >
+            Enter as Guest
+          </button>
         </div>
-        <div>
-          <h4 className="font-bold text-slate-800 line-clamp-1">{title}</h4>
-          <p className="text-xs text-slate-400">{date}</p>
-        </div>
-      </div>
-      <div className="mt-6 flex items-center justify-between">
-        <span className="text-xs font-bold text-slate-400">Score: <span className={score === 'N/A' ? 'text-slate-300' : 'text-indigo-600'}>{score}</span></span>
-        <button className="text-indigo-600 font-bold text-xs flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-          Play <PlayCircle className="w-4 h-4" />
+        <button onClick={() => setView('intro')} className="w-full mt-10 text-slate-600 hover:text-rose-400 flex items-center justify-center gap-2 font-bold transition-colors">
+          <X size={18} /> ABORT INITIALIZATION
         </button>
       </div>
     </div>
   );
-}
 
-function StatIcon({ icon, label, value }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="text-indigo-400">{icon}</div>
-      <div>
-        <p className="text-[10px] font-bold uppercase opacity-50 leading-none">{label}</p>
-        <p className="text-sm font-black leading-none">{value}</p>
-      </div>
+  const DashboardView = () => (
+    <div className="min-h-screen bg-[#020617] text-white p-8 md:p-12">
+      <nav className="flex justify-between items-center max-w-6xl mx-auto mb-20">
+        <div className="flex items-center gap-4">
+          <div className="bg-cyan-500 p-3 rounded-2xl text-black shadow-[0_0_20px_rgba(34,211,238,0.5)]"><GraduationCap size={28} /></div>
+          <div>
+            <span className="text-2xl font-black tracking-tighter block leading-none">HRYZEN</span>
+            <span className="text-[10px] font-bold tracking-[0.3em] text-cyan-500 uppercase">Study Core</span>
+          </div>
+        </div>
+        <button onClick={() => signOut(auth)} className="bg-slate-900/80 p-4 rounded-2xl hover:bg-rose-500/10 hover:text-rose-400 text-slate-500 transition-all border border-slate-800">
+          <LogOut size={22} />
+        </button>
+      </nav>
+      <main className="max-w-4xl mx-auto">
+        <div className="text-center mb-16">
+          <h2 className="text-5xl md:text-6xl font-black mb-6 tracking-tight">Active Terminal</h2>
+          <p className="text-slate-500 text-xl font-medium">Ready to convert documentation into experience points?</p>
+        </div>
+        <div className="bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-[4rem] p-20 text-center transition-all hover:border-cyan-500/50 hover:bg-cyan-500/[0.02] group relative overflow-hidden">
+          {loading ? (
+            <div className="flex flex-col items-center gap-8 py-10">
+              <div className="relative">
+                <Loader2 className="animate-spin text-cyan-400" size={80} />
+                <div className="absolute inset-0 bg-cyan-400/20 blur-xl rounded-full"></div>
+              </div>
+              <div className="space-y-3">
+                <p className="text-cyan-400 font-mono tracking-[0.4em] text-sm uppercase animate-pulse">Neural Mapping in Progress</p>
+                <p className="text-slate-500 text-sm italic">Synchronizing PDF nodes with Hryzen logic...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center relative z-10">
+              <div className="bg-slate-800/50 w-28 h-28 rounded-[2.5rem] flex items-center justify-center text-cyan-400 mb-10 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 border border-slate-700 shadow-2xl">
+                <Upload size={48} />
+              </div>
+              <label className="cursor-pointer">
+                <span className="bg-cyan-500 text-black px-12 py-5 rounded-[1.5rem] font-black text-xl hover:bg-cyan-400 hover:shadow-[0_0_30px_rgba(34,211,238,0.4)] transition-all active:scale-95 inline-block">
+                  UPLOAD STUDY NOTES
+                </span>
+                <input type="file" className="hidden" accept=".pdf" onChange={handleFileUpload} />
+              </label>
+              <p className="mt-8 text-slate-500 font-bold tracking-widest text-xs uppercase">Target: PDF / 50MB MAX</p>
+            </div>
+          )}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
+          <div className="bg-slate-900/40 p-8 rounded-[2.5rem] border border-slate-800 flex flex-col gap-4 hover:border-slate-700 transition-all group">
+            <div className="bg-blue-500/10 w-12 h-12 rounded-xl flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform"><Target /></div>
+            <div>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Focus Score</p>
+              <p className="text-2xl font-black">---</p>
+            </div>
+          </div>
+          <div className="bg-slate-900/40 p-8 rounded-[2.5rem] border border-slate-800 flex flex-col gap-4 hover:border-slate-700 transition-all group">
+            <div className="bg-emerald-500/10 w-12 h-12 rounded-xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform"><Trophy /></div>
+            <div>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">XP Gained</p>
+              <p className="text-2xl font-black">0 PTS</p>
+            </div>
+          </div>
+          <div className="bg-slate-900/40 p-8 rounded-[2.5rem] border border-slate-800 flex flex-col gap-4 hover:border-slate-700 transition-all group">
+            <div className="bg-amber-500/10 w-12 h-12 rounded-xl flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform"><Zap /></div>
+            <div>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Student Rank</p>
+              <p className="text-2xl font-black tracking-tighter">LEVEL 1</p>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
-}
 
-// --- VITE ENTRY POINT ---
+  const QuizView = () => {
+    const q = quizData[currentQuestion];
+    const handleAnswer = (isTrue) => {
+      if (isTrue === q.answer) setScore(score + 1);
+      if (currentQuestion < quizData.length - 1) {
+        setCurrentQuestion(currentQuestion + 1);
+      } else {
+        setView('results');
+      }
+    };
+    return (
+      <div className="min-h-screen bg-[#020617] text-white p-6 flex flex-col">
+        <div className="flex justify-between items-center max-w-5xl mx-auto w-full mb-12 py-4">
+          <div className={`flex items-center gap-5 ${adventure.bg} p-5 rounded-[2rem] border ${adventure.border}/30 shadow-2xl`}>
+            <div className={`${adventure.color} scale-125`}>{adventure.icon}</div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Neural Sector</p>
+              <h4 className="font-black text-xl tracking-tight">{adventure.name}</h4>
+            </div>
+          </div>
+          <div className="bg-slate-900/60 p-6 rounded-[2rem] border border-slate-800 backdrop-blur-md">
+            <div className="w-56 h-3 bg-slate-800/50 rounded-full overflow-hidden mb-3 border border-white/5">
+              <div className={`h-full transition-all duration-700 ease-out ${adventure.color.replace('text', 'bg')}`} style={{ width: `${((currentQuestion + 1) / quizData.length) * 100}%` }}></div>
+            </div>
+            <p className="text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Synapse Link: {currentQuestion + 1} / {quizData.length}</p>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center max-w-4xl mx-auto w-full pb-20">
+          <div className="bg-slate-900 border border-slate-800 rounded-[4rem] p-16 shadow-[0_0_100px_rgba(0,0,0,0.5)] relative overflow-hidden text-center">
+            <div className="absolute top-0 right-0 p-12 opacity-[0.03] scale-[4] rotate-12">{adventure.icon}</div>
+            <span className={`inline-block px-6 py-2 rounded-full text-xs font-black uppercase tracking-[0.3em] mb-12 shadow-lg ${adventure.bg} ${adventure.color} border border-white/5`}>Cognitive Test</span>
+            <h3 className="text-4xl md:text-5xl font-black leading-[1.1] mb-20 px-4 tracking-tight">{q.question}</h3>
+            <div className="grid grid-cols-2 gap-10 max-w-2xl mx-auto">
+              <button onClick={() => handleAnswer(true)} className="group p-10 rounded-[2.5rem] bg-slate-800/30 border-2 border-slate-700 hover:border-emerald-500 hover:bg-emerald-500/10 transition-all transform active:scale-90">
+                <div className="bg-emerald-500/20 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 text-emerald-400 group-hover:scale-110 transition-all border border-emerald-500/20"><CheckCircle2 size={36} /></div>
+                <p className="font-black text-2xl tracking-widest uppercase">TRUE</p>
+              </button>
+              <button onClick={() => handleAnswer(false)} className="group p-10 rounded-[2.5rem] bg-slate-800/30 border-2 border-slate-700 hover:border-rose-500 hover:bg-rose-500/10 transition-all transform active:scale-90">
+                <div className="bg-rose-500/20 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 text-rose-400 group-hover:scale-110 transition-all border border-rose-500/20"><X size={36} /></div>
+                <p className="font-black text-2xl tracking-widest uppercase">FALSE</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ResultsView = () => (
+    <div className="min-h-screen bg-[#020617] text-white flex flex-col items-center justify-center p-6 text-center">
+      <div className="relative mb-10">
+        <div className="absolute inset-0 bg-amber-400/20 blur-[60px] animate-pulse"></div>
+        <Trophy size={100} className="text-amber-400 relative" />
+      </div>
+      <h2 className="text-6xl font-black mb-6 uppercase tracking-tighter italic">NEURAL SYNC COMPLETE</h2>
+      <p className="text-slate-400 text-xl max-w-md mb-16 font-medium">Knowledge has been successfully integrated into your long-term memory core.</p>
+      <div className="bg-slate-900 p-12 rounded-[4rem] border border-slate-800 mb-16 w-full max-w-md shadow-2xl relative">
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-slate-800 px-6 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.3em] border border-slate-700">Final Metrics</div>
+        <p className="text-slate-500 uppercase font-black tracking-[0.4em] text-xs mb-4">Sync Fidelity</p>
+        <p className="text-9xl font-black text-cyan-400 tracking-tighter">{Math.round((score / quizData.length) * 100)}<span className="text-3xl">%</span></p>
+      </div>
+      <button onClick={() => setView('dashboard')} className="group bg-white text-black px-16 py-6 rounded-[2rem] font-black text-2xl hover:bg-cyan-400 hover:scale-105 transition-all shadow-2xl active:scale-95 flex items-center gap-3">
+        RETURN TO HQ <ChevronRight />
+      </button>
+    </div>
+  );
+
+  switch(view) {
+    case 'intro': return <IntroView />;
+    case 'auth': return <AuthView />;
+    case 'dashboard': return <DashboardView />;
+    case 'quiz': return <QuizView />;
+    case 'results': return <ResultsView />;
+    default: return <IntroView />;
+  }
+};
+
 const container = document.getElementById('root');
 if (container) {
   const root = createRoot(container);
   root.render(<App />);
 }
+
+export default App;

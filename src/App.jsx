@@ -47,6 +47,28 @@ import {
   ArrowRight
 } from 'lucide-react';
 
+// --- CONSTANTS & HELPERS ---
+const QUEST_TEMPLATES = [
+  { name: "Neural Breach", description: "Infiltrate the core data layers." },
+  { name: "Logic Siege", description: "Defend your cognitive borders." },
+  { name: "Memory Synthesis", description: "Forge new neural connections." }
+];
+
+const MONSTER_PREFIXES = ["Corrupted", "Vitreous", "Binary", "Quantum", "Spectral"];
+const MONSTER_TYPES = ["Sentinel", "Phantom", "Goliath", "Infiltrator", "Stalker"];
+
+const generateQuestionsFromText = (text) => {
+  const sentences = text.split(/[.!?]/).filter(s => s.trim().length > 40);
+  return sentences.slice(0, 5).map((s, i) => ({
+    id: `q-${i}-${Date.now()}`,
+    question: `Artifact Analysis: "${s.trim().substring(0, 70)}..."?`,
+    options: ["Primary Logic", "Secondary Data", "System Error", "Noise"],
+    answer: 0
+  }));
+};
+
+// --- YOUR FIREBASE CONFIG STARTS BELOW ---
+
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCHEljnX6Jth5aSudsr-TkEj6DGCK547uo",
@@ -376,12 +398,16 @@ const Library = ({ notes, user, onUpload }) => {
     }
   };
 
-  const generateQuestionsFromText = (text) => {
-    const sentences = text.split(/[.!?]/).filter(s => s.length > 30);
-    const mockQuestions = sentences.slice(0, 10).map((s, i) => {
-      const words = s.trim().split(' ');
-      const subject = words[0];
-      return {
+ const generateQuestionsFromText = (text) => {
+  const sentences = text.split(/[.!?]/).filter(s => s.trim().length > 40);
+  return sentences.slice(0, 5).map((s, i) => ({
+    id: `q-${i}-${Date.now()}`,
+    question: `Based on the data: "${s.trim().substring(0, 70)}...", what is being discussed?`,
+    options: ["Primary Concept", "Secondary Detail", "Anomalous Data", "Statistical Noise"],
+    answer: 0,
+    difficulty: 'normal'
+  }));
+}; 
         id: `q-${i}`,
         type: 'multiple-choice',
         question: `Based on the data provided, what is the significance of: "...${words.slice(0, 5).join(' ')}..."?`,
